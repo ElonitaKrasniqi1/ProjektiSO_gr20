@@ -24,8 +24,24 @@ int main(int argc, char **argv)
     int client_socket, nameval, msgval, sd; // mbajme vlerat e soketeve dhe ato te kthyera nga leximi dhe shkrimi
     int activity;                    // Perdoret me select() per te kontrolluar per mesazhe te reja te ardhura
     struct addrinfo address, *res, *p;
+  
+//nese nr eshte me i vogel se 3 shfaqet stderr per userin dhe tregon qysh me perdor programin edhe mbyllet programi pa sukses
+    if (argc < 3){
+      fprintf(stderr, "[SYS_MSG]: usage %s hostname port\n", argv[0]);
+      exit(EXIT_FAILURE);
+    }
 
-
+  //seti i pershkruesve te soketes
+    fd_set readfds, writefds;
+    //fshini setin e pershkruesve te soketave te file descriptoreve
+    FD_ZERO(&readfds);
+    FD_ZERO(&writefds);
+  
+   //kerko emrin e perdoruesit
+    printf("Enter your name: ");
+    fgets(name, sizeof(name), stdin);
+    name[strlen(name)-1] = '\0';    // shto nje emer te ri
+  
 
 
 
