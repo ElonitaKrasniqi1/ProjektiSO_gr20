@@ -90,6 +90,47 @@ int main(int argc, char **argv)
     sd = client_socket;
   
       
+   // presim serverin per welcome message
+    msgval = read(client_socket, buffer, sizeof(buffer));       //lexojme nga serveri 
+    if (msgval < 0) error("[SYS_MSG]: Error on Reading");
+    printf("[SERVER]: %s\n", buffer);
+
+    //dergojme emrin te serveri pasi qe konektimi te jete stabil
+    nameval = send(client_socket, name, strlen(name), 0);   //shkruajm te serveri
+    if (nameval < 0) error("[SYS_MSG]: Error on Writting");    //bejme check  per error message
+
+    //ketu fillon komunikimi 
+    while (1){
+      //nese socket descriptori eshte valid atehere e vendosim te file descriptor set
+      if (sd > 0) FD_SET(sd, &readfds);
+      //Prit per aktivitet ne soketat pa kufizim kohor.
+      activity = select(sd + 1, &readfds, &writefds, NULL, NULL);
+      // check per errora
+      if ((activity < 0) && (errno != EINTR)) error("[SYS_MSG]: Error Select");
+
+      if (FD_ISSET(sd, &readfds)){
+          nameval = recv(sd, newname, sizeof(newname), 0);          //merr emrin e derguesit
+//// Kontrollo per gabime gjate pranimit te mesazhit ose emrit. 
+          msgval = recv(sd, buffer, sizeof(buffer), 0);
+          if (msgval < 0 || nameval < 0) error("Reiev Error");
+
+          newname[nameval] = '\0';
+          buffer[msgval] = '\0';                        // Shto null terminator ne fund te mesazhit te pranuar.
+          printf("[%s]: %s\n",newname, buffer);
+       }
+// Nese soketi sd eshte pjese e writefds, printo ">>> ", prit per input nga shfletuesi,
+        if (FD_ISSET(sd, &writefds)){
+         printf(">>> ");
+         fgets(buffer, sizeof(buffer), stdin);
+// dergo emrin dhe bufferin ne server duke perdorur send().
+         send(client_socket, name, strlen(name), 0);
+         send(client_socket, buffer, strlen(buffer), 0);
+        }
+    }
+//mbyll client socketin
+    close(client_socket);
+    return 0;
+}
   
   
 
