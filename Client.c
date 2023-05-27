@@ -55,6 +55,42 @@ int main(int argc, char **argv)
 //Kontrollo nese ka error gjate marrjes
         error("[SYS_MSG]: getaddrinfo fail.");
   
+  // loop rreth te gjitha rezultateve dhe konekto te paren e mundshme
+    puts("[SYS_MSG]: Connection......");
+    for(p = res; p != NULL; p = p->ai_next) {
+        //krijimi i socket 
+        if ((client_socket = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
+            error("[SYS_MSG]: Error on Socket"); //bejme check per error
+            continue;
+        }
+      
+      //// Lidhuni me serverin duke perdorur adresen dhe gjatesin e adreses se dhene ne strukturen p.
+        if (connect(client_socket, p->ai_addr, p->ai_addrlen) == -1) {
+            close(client_socket);
+            error("[SYS_MSG]: Error on Connection");
+            continue;
+        }
+
+        break;
+    }
+  
+  //nese struktura eshte null mesazh errori
+    if (p == NULL) {
+        fprintf(stderr, "client: failed to connect\n");
+        return 2;
+    }
+
+    puts("[SYS_MSG]: Connection Established.");
+    freeaddrinfo(res); // all done with this structure
+
+    //shto client socket ne file descrip
+    FD_SET(client_socket, &readfds);
+    FD_SET(client_socket, &writefds);
+
+    sd = client_socket;
+  
+      
+  
   
 
 
