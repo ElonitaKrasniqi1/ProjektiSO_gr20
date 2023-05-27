@@ -42,6 +42,20 @@ int main(int argc, char **argv)
     fgets(name, sizeof(name), stdin);
     name[strlen(name)-1] = '\0';    // shto nje emer te ri
   
+  memset(&address, 0,sizeof(address)); //fshi server objektin vendos 0
+ 
+    //specifiko nje adres per socket 
+    address.ai_family = AF_INET;
+    address.ai_socktype = SOCK_STREAM;
+    puts("[SYS_MSG]: Initializing......");  
+  
+//kerko informacionin e adreses per hostin dhe portin
+    int status = getaddrinfo(argv[1], argv[2] , &address, &res);
+    if (status < 0)
+//Kontrollo nese ka error gjate marrjes
+        error("[SYS_MSG]: getaddrinfo fail.");
+  
+  
 
 
 
