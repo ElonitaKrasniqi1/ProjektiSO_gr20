@@ -5,7 +5,7 @@
 #include <string.h>
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <netinet/in.h>
+#include <netinet/in.h - lresolv>
 #include <netdb.h>
 #include <arpa/inet.h>
 #include <sys/time.h> //FD_SET, FD_ISSET, FD_ZERO macros
@@ -24,6 +24,7 @@ int main(int argc, char **argv)
     int client_socket, nameval, msgval, sd; // mbajme vlerat e soketeve dhe ato te kthyera nga leximi dhe shkrimi
     int activity;                    // Perdoret me select() per te kontrolluar per mesazhe te reja te ardhura
     struct addrinfo address, *res, *p;
+    memset (&address, 0, sizeof(address));
   
 //nese nr eshte me i vogel se 3 shfaqet stderr per userin dhe tregon qysh me perdor programin edhe mbyllet programi pa sukses
     if (argc < 3){
@@ -53,21 +54,21 @@ int main(int argc, char **argv)
     int status = getaddrinfo(argv[1], argv[2] , &address, &res);
     if (status < 0)
 //Kontrollo nese ka error gjate marrjes
-        error("[SYS_MSG]: getaddrinfo fail.");
+        perror("[SYS_MSG]: getaddrinfo fail.");
   
   // loop rreth te gjitha rezultateve dhe konekto te paren e mundshme
     puts("[SYS_MSG]: Connection......");
     for(p = res; p != NULL; p = p->ai_next) {
         //krijimi i socket 
         if ((client_socket = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
-            error("[SYS_MSG]: Error on Socket"); //bejme check per error
+            perror("[SYS_MSG]: Error on Socket"); //bejme check per error
             continue;
         }
       
       //// Lidhuni me serverin duke perdorur adresen dhe gjatesin e adreses se dhene ne strukturen p.
         if (connect(client_socket, p->ai_addr, p->ai_addrlen) == -1) {
             close(client_socket);
-            error("[SYS_MSG]: Error on Connection");
+            perror("[SYS_MSG]: Error on Connection");
             continue;
         }
 
@@ -92,27 +93,32 @@ int main(int argc, char **argv)
       
    // presim serverin per welcome message
     msgval = read(client_socket, buffer, sizeof(buffer));       //lexojme nga serveri 
-    if (msgval < 0) error("[SYS_MSG]: Error on Reading");
+    if (msgval < 0) 
+        perror("[SYS_MSG]: Error on Reading");
     printf("[SERVER]: %s\n", buffer);
 
     //dergojme emrin te serveri pasi qe konektimi te jete stabil
     nameval = send(client_socket, name, strlen(name), 0);   //shkruajm te serveri
-    if (nameval < 0) error("[SYS_MSG]: Error on Writting");    //bejme check  per error message
+    if (nameval < 0) 
+        perror("[SYS_MSG]: Error on Writting");    //bejme check  per error message
 
     //ketu fillon komunikimi 
     while (1){
       //nese socket descriptori eshte valid atehere e vendosim te file descriptor set
-      if (sd > 0) FD_SET(sd, &readfds);
+      if (sd > 0) 
+          FD_SET(sd, &readfds);
       //Prit per aktivitet ne soketat pa kufizim kohor.
       activity = select(sd + 1, &readfds, &writefds, NULL, NULL);
       // check per errora
-      if ((activity < 0) && (errno != EINTR)) error("[SYS_MSG]: Error Select");
+      if ((activity < 0) && (errno != EINTR)) 
+          perror("[SYS_MSG]: Error Select");
 
       if (FD_ISSET(sd, &readfds)){
           nameval = recv(sd, newname, sizeof(newname), 0);          //merr emrin e derguesit
 //// Kontrollo per gabime gjate pranimit te mesazhit ose emrit. 
           msgval = recv(sd, buffer, sizeof(buffer), 0);
-          if (msgval < 0 || nameval < 0) error("Reiev Error");
+          if (msgval < 0 || nameval < 0) 
+          perror("Reiev Error");
 
           newname[nameval] = '\0';
           buffer[msgval] = '\0';                        // Shto null terminator ne fund te mesazhit te pranuar.
