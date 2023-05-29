@@ -4,191 +4,129 @@
 #include <unistd.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <pthread.h>
-#include <time.h>
-#include <arpa/inet.h>
 
-#define MAX_CLIENTS 100
-#define BUFFER_SIZE 2048
+#define PORT 12345
+#define MAX_CLIENTS 5
+#define BUFFER_SIZE 4096
 
 typedef struct {
-    struct sockaddr_in address;
-    int sockfd;
-    int uid;
-    char name[32];
-} client_t;
+    int socket;
+    char name[BUFFER_SIZE];
+} Client;
 
-client_t *clients[MAX_CLIENTS];
-pthread_mutex_t clients_mutex = PTHREAD_MUTEX_INITIALIZER;
-int cli_count = 0;
-int uid = 0;
-pthread_mutex_t print_mutex = PTHREAD_MUTEX_INITIALIZER;
-
-void add_timestamp(char* buffer) {
-    time_t timer;
-    char time_buffer[26];
-    struct tm* tm_info;
-
-    time(&timer);
-    tm_info = localtime(&timer);
-
-    strftime(time_buffer, 26, "%Y-%m-%d %H:%M:%S", tm_info);
-    strcat(buffer, time_buffer);
-}
-
-void send_message(const char *s, const int uid){
-    pthread_mutex_lock(&clients_mutex);
-    pthread_mutex_lock(&print_mutex);
-    for(int i=0; i<MAX_CLIENTS; ++i){
-        if(clients[i]){
-            if(clients[i]->uid != uid){
-                write(clients[i]->sockfd, s, strlen(s));
-            }
-        }
-    }
-    pthread_mutex_unlock(&print_mutex);
-    pthread_mutex_unlock(&clients_mutex);
-}
-
-void *handle_client(void *arg){
+void handle_client(Client* client, Client* clients) {
     char buffer[BUFFER_SIZE];
-    char name[32];
-    int leave_flag = 0;
+    ssize_t received_bytes;
 
-    client_t *cli = (client_t *)arg;
-
-    // Name protocol
-    if(recv(cli->sockfd, name, 32, 0) <= 0 || strlen(name) < 2 || strlen(name) >= 32-1){
-        printf("Didn't enter the name correctly.\n");
-        leave_flag = 1;
-    } else {
-        strncpy(cli->name, name, sizeof(cli->name));
-        printf("%s has joined\n", cli->name);
+    // Welcome the client and announce their arrival
+    snprintf(buffer, BUFFER_SIZE, "%.100s has joined the chat.\n", client->name);
+    printf("%s", buffer);
+    for (int i = 0; i < MAX_CLIENTS; i++) {
+        if (i != client->socket && clients[i].socket != -1) {
+            send(clients[i].socket, buffer, strlen(buffer), 0);
+        }
     }
 
-    // Conversation protocol
-    while(1){
-        if (leave_flag) {
-            break;
-        }
+    // Receive and process messages from the client
+    while ((received_bytes = recv(client->socket, buffer, BUFFER_SIZE - 1, 0)) > 0) {
+        buffer[received_bytes] = '\0';
+        printf("%.100s: %s", client->name, buffer);
 
-        int receive = recv(cli->sockfd, buffer, BUFFER_SIZE, 0);
-        if (receive > 0){
-            if(strlen(buffer) > 0){
-                if(strcmp(buffer, "/quit") == 0){
-                    leave_flag = 1;
-                } else if(strcmp(buffer, "/list") == 0){
-                    for(int i = 0; i < MAX_CLIENTS; i++){
-                        if(clients[i]){
-                            send_message(clients[i]->name, cli->uid);
-                        }
-                    }
-                } else if(strncmp(buffer, "/msg", 4) == 0){
-                    char recipient[32];
-                    strncpy(recipient, buffer + 5, sizeof(recipient));
-                    char *space_ptr = strchr(recipient, ' ');
-                    if(space_ptr != NULL){
-                        *space_ptr = '\0';
-                        char *message = space_ptr + 1;
-                        for(int i = 0; i < MAX_CLIENTS; i++){
-                            if(clients[i] != NULL && strcmp(clients[i]->name, recipient) == 0){
-                                send_message(message, cli->uid);
-                                break;
-                            }
-                        }
-                    }
-                } else {
-                    add_timestamp(buffer);
-                    strcat(buffer, cli->name); // Add the name of the client to the message
-
-                    pthread_mutex_lock(&print_mutex);
-                    printf("%s\n", buffer); // Print the message on the server's terminal
-                    pthread_mutex_unlock(&print_mutex);
-
-                    send_message(buffer, cli->uid);
-                }
+        // Broadcast the message to other clients
+        for (int i = 0; i < MAX_CLIENTS; i++) {
+            if (i != client->socket && clients[i].socket != -1) {
+                send(clients[i].socket, buffer, strlen(buffer), 0);
             }
-        } else if (receive == 0){
-            sprintf(buffer, "%s has left", cli->name);
-            printf("%s\n", buffer);
-            leave_flag = 1;
-        } else {
-            printf("ERROR: -1\n");
-            leave_flag = 1;
         }
-        bzero(buffer, BUFFER_SIZE);
-    }
 
-    close(cli->sockfd);
-    pthread_mutex_lock(&clients_mutex);
-
-    // Find and remove client from array
-    for(int i=0; i<MAX_CLIENTS; ++i) {
-        if(clients[i] == cli) {
-            clients[i] = NULL;
+        // Check if the client wants to exit
+        if (strncmp(buffer, "exit", 4) == 0)
             break;
-        }
+
+        memset(buffer, 0, BUFFER_SIZE);
     }
 
-    pthread_mutex_unlock(&clients_mutex);
-    free(cli);
-    pthread_detach(pthread_self());
-
-    return NULL;
+    // Announce the client's departure and close the socket
+    snprintf(buffer, BUFFER_SIZE, "%.100s has left the chat.\n", client->name);
+    printf("%s", buffer);
+    for (int i = 0; i < MAX_CLIENTS; i++) {
+        if (i != client->socket && clients[i].socket != -1) {
+            send(clients[i].socket, buffer, strlen(buffer), 0);
+        }
+    }
+    close(client->socket);
+    client->socket = -1;
 }
 
-int main(int argc, char **argv){
-    char *ip = "127.0.0.1";
-    int port = 12345;
+int main() {
+    int server_fd, new_socket;
+    struct sockaddr_in address;
+    int addrlen = sizeof(address);
 
-    int sockfd, new_sock;
-    struct sockaddr_in serv_addr, cli_addr;
-    socklen_t cli_len;
+    Client clients[MAX_CLIENTS];
+    for (int i = 0; i < MAX_CLIENTS; i++) {
+        clients[i].socket = -1;
+        memset(clients[i].name, 0, BUFFER_SIZE);
+    }
 
-    // Set up server
-    sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    serv_addr.sin_family = AF_INET;
-    serv_addr.sin_addr.s_addr = inet_addr(ip);
-    serv_addr.sin_port = htons(port);
+    // Create a socket
+    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
+        perror("Socket creation failed");
+        exit(EXIT_FAILURE);
+    }
 
-    bind(sockfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr));
-    listen(sockfd, 1);
+    // Set socket options and bind to a port
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = INADDR_ANY;
+    address.sin_port = htons(PORT);
 
-    printf("Server started...\n");
+    if (bind(server_fd, (struct sockaddr*)&address, sizeof(address)) < 0) {
+        perror("Binding failed");
+        exit(EXIT_FAILURE);
+    }
 
-    while(1){
-        cli_len = sizeof(cli_addr);
-        new_sock = accept(sockfd, (struct sockaddr*)&cli_addr, &cli_len);
+    // Listen for incoming connections
+    if (listen(server_fd, MAX_CLIENTS) < 0) {
+        perror("Listening failed");
+        exit(EXIT_FAILURE);
+    }
 
-        // Check if max clients is reached
-        if((cli_count + 1) == MAX_CLIENTS){
-            printf("Max clients reached. Rejected: \n");
-            close(new_sock);
-            continue;
+    // Accept and handle incoming clients
+    while (1) {
+        if ((new_socket = accept(server_fd, (struct sockaddr*)&address, (socklen_t*)&addrlen)) < 0) {
+            perror("Accepting failed");
+            exit(EXIT_FAILURE);
         }
 
-        // Client settings
-        client_t *cli = (client_t *)malloc(sizeof(client_t));
-        cli->address = cli_addr;
-        cli->sockfd = new_sock;
-        cli->uid = uid++;
-
-        pthread_t tid;
-
-        // Add client to the array
-        pthread_mutex_lock(&clients_mutex);
-        for(int i=0; i<MAX_CLIENTS; ++i){
-            if(!clients[i]){
-                clients[i] = cli;
+        // Find an available slot for the new client
+        int i;
+        for (i = 0; i < MAX_CLIENTS; i++) {
+            if (clients[i].socket == -1) {
+                clients[i].socket = new_socket;
                 break;
             }
         }
-        pthread_mutex_unlock(&clients_mutex);
 
-        // Create thread for client communication
-        pthread_create(&tid, NULL, &handle_client, (void*)cli);
+        // If no slot is available, reject the client
+        if (i == MAX_CLIENTS) {
+            const char* message = "Chat room is full. Try again later.\n";
+            send(new_socket, message, strlen(message), 0);
+            close(new_socket);
+            continue;
+        }
 
-        sleep(1);
+        // Receive the client's name
+        ssize_t received_bytes = recv(clients[i].socket, clients[i].name, BUFFER_SIZE - 1, 0);
+        clients[i].name[received_bytes] = '\0';
+
+        // Create a new process to handle the client
+        if (fork() == 0) {
+            close(server_fd);
+            handle_client(&clients[i], clients);
+            exit(EXIT_SUCCESS);
+        }
+
+        close(new_socket);
     }
 
     return 0;
