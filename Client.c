@@ -4,77 +4,68 @@
 #include <unistd.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <pthread.h>
 #include <arpa/inet.h>
 
-#define MAX_BUFFER 2048
+#define PORT 12345
+#define SERVER_IP "127.0.0.1"
+#define BUFFER_SIZE 4096
 
-typedef struct {
-    char name[32];
-    int sockfd;
-} client_t;
+int main() {
+    int client_socket;
+    struct sockaddr_in server_address;
+    char buffer[BUFFER_SIZE];
 
-void *receive_handler(void *arg) {
-    client_t *client = (client_t *)arg;
-    char buffer[MAX_BUFFER];
-    while (1) {
-        int receive = recv(client->sockfd, buffer, MAX_BUFFER, 0);
-        if (receive > 0) {
-            printf("%s\n", buffer); // Print the relayed message on the client's terminal
-        } else if (receive == 0) {
-            break;
-        } else {
-            // -1
-        }
-        memset(buffer, 0, sizeof(buffer));
-    }
-    return NULL;
-}
-
-int main(int argc, char **argv) {
-    char *ip = "127.0.0.1";
-    int port = 12345;
-    char buffer[MAX_BUFFER];
-
-    int sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    struct sockaddr_in serv_addr;
-    serv_addr.sin_family = AF_INET;
-    serv_addr.sin_port = htons(port);
-    serv_addr.sin_addr.s_addr = inet_addr(ip);
-
-    if (connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) > 0) {
-        printf("Connection to the server failed...\n");
-        exit(1);
+    // Create a socket
+    if ((client_socket = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
+        perror("Socket creation failed");
+        exit(EXIT_FAILURE);
     }
 
-    printf("Connected to server. Enter your name: ");
-    fgets(buffer, 32, stdin);
-    buffer[strcspn(buffer, "\n")] = 0;
-    send(sockfd, buffer, strlen(buffer), 0);
+    // Set up server address and port
+    server_address.sin_family = AF_INET;
+    server_address.sin_port = htons(PORT);
 
-    client_t client;
-    strcpy(client.name, buffer);
-    client.sockfd = sockfd;
-
-    printf("Welcome %s! You can now send messages!\n", client.name);
-
-    pthread_t receive_thread;
-    if (pthread_create(&receive_thread, NULL, &receive_handler, (void *)&client) != 0) {
-        printf("ERROR: pthread\n");
-        return EXIT_FAILURE;
+    if (inet_pton(AF_INET, SERVER_IP, &(server_address.sin_addr)) <= 0) {
+        perror("Invalid address/ Address not supported");
+        exit(EXIT_FAILURE);
     }
+
+    // Connect to the server
+    if (connect(client_socket, (struct sockaddr*)&server_address, sizeof(server_address)) < 0) {
+        perror("Connection failed");
+        exit(EXIT_FAILURE);
+    }
+
+    printf("Connected to the server. Enter your name: ");
+    fgets(buffer, BUFFER_SIZE, stdin);
+
+    // Send the client name to the server
+    send(client_socket, buffer, strlen(buffer), 0);
+
+    // Start the chat
+    printf("Chat started. You can start sending messages.\n");
 
     while (1) {
-        fgets(buffer, MAX_BUFFER, stdin);
-        buffer[strcspn(buffer, "\n")] = 0;
-        send(sockfd, buffer, strlen(buffer), 0);
+        printf("Enter your message (or 'exit' to quit): ");
+        fgets(buffer, BUFFER_SIZE, stdin);
 
-        if (strcmp(buffer, "/quit") == 0) {
+        // Send the message to the server
+        send(client_socket, buffer, strlen(buffer), 0);
+
+        // Check if the client wants to exit
+        if (strncmp(buffer, "exit", 4) == 0)
             break;
+
+        // Receive and display the server's response
+        memset(buffer, 0, BUFFER_SIZE);
+        ssize_t received_bytes = recv(client_socket, buffer, BUFFER_SIZE, 0);
+        if (received_bytes > 0) {
+            printf("Server response: %s\n", buffer);
         }
     }
 
-    close(sockfd);
+    // Close the socket
+    close(client_socket);
 
-    return EXIT_SUCCESS;
+    return 0;
 }
