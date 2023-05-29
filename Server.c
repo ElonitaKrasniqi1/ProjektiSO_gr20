@@ -64,7 +64,7 @@ int main(int argc, char **argv)
     //merr infon e IP adreses
     int status = getaddrinfo(NULL,argv[1] , &address, &res);
     if (status < 0)
-        error("[SYS_MSG]: getaddrinfo fail.");
+        perror("[SYS_MSG]: getaddrinfo fail.");
 
     int port_num = atoi(argv[1]);  //numri i portit per me degju
     //inicializoje te gjitha client_socket[] me 0
@@ -79,7 +79,7 @@ int main(int argc, char **argv)
         }
         //cakton soketin e serverit per te lejuar lidhje te shumta
         if (setsockopt(server_socket, SOL_SOCKET, SO_REUSEADDR, (char *)&opt, sizeof(opt)) < 0)
-            error("[SYS_MSG]: setsockopt Failed.");
+            perror("[SYS_MSG]: setsockopt Failed.");
 
         //lidh soketin me adresen
         if (bind(server_socket, p->ai_addr, p->ai_addrlen) < 0) {
@@ -100,7 +100,7 @@ int main(int argc, char **argv)
 
 //degjojme per lidhje
     if(listen(server_socket, MAX_CLIENTS) < 0)
-        error("[SYS_MSG]: Error Listning");
+        perror("[SYS_MSG]: Error Listning");
 
     //pranojme lidhjet qe vijne
     puts("[SYS_MSG]: Waiting for connection......");
@@ -131,12 +131,14 @@ int main(int argc, char **argv)
         //wait for activity on the sockets indefinitely
         activity = select(max_sd + 1, &readfds, NULL, NULL, NULL);
         // check per errors
-        if ((activity < 0) && (errno != EINTR)) error("[SYS_MSG]: Error Select");
+        if ((activity < 0) && (errno != EINTR)) 
+            perror("[SYS_MSG]: Error Select");
         //check per lidhje te reja
         if (FD_ISSET(server_socket, &readfds)){
             //pranojme lidhjet e reja
             new_socket = accept(server_socket, (struct sockaddr *)&clnt_addr, &addr_size);
-            if (new_socket < 0) error("[SYS_MSG]: Incomming Connection Not Accepted."); //check per errors
+            if (new_socket < 0) 
+                perror("[SYS_MSG]: Incomming Connection Not Accepted."); //check per errors
             //printojme tdhenat e lidhjes se re
             printf("[SYS_MSG]: New Connection.\n"
             "\tSocket FD  -> %d\n"
@@ -144,7 +146,7 @@ int main(int argc, char **argv)
             "\tPort       -> %d\n", new_socket, inet_ntop(clnt_addr.ss_family, (struct sockaddr*)&clnt_addr, remoteIP, INET6_ADDRSTRLEN), port_num);
             //i dergojme lidhjes se re mesazh mireseardhje
             if (send(new_socket, message, strlen(message), 0) != strlen(message))
-                error("[SYS_MSG]: Send failed.");  //check per errors
+                perror("[SYS_MSG]: Send failed.");  //check per errors
 
             puts("[SYS_MSG]: Welcome message sent successfully");
 
