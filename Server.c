@@ -61,6 +61,12 @@ void handle_client(Client* client) {
 
     broadcast_message(&message);
 
+
+// Announce client's arrival
+pthread_mutex_lock(&clients_mutex);
+printf("%s joined the chat.\n", client->name);
+pthread_mutex_unlock(&clients_mutex);
+
     // Receive and process messages from the client
     while ((received_bytes = recv(client->socket, buffer, BUFFER_SIZE - 1, 0)) > 0) {
         buffer[received_bytes] = '\0';
@@ -79,6 +85,7 @@ void handle_client(Client* client) {
 
         memset(buffer, 0, BUFFER_SIZE);
     }
+    
 
     // Announce the client's departure and close the socket
     snprintf(buffer, BUFFER_SIZE, "%.100s has left the chat.\n", client->name);
