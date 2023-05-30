@@ -18,3 +18,5 @@ Projekti u punua nga:
 - Ema Zeqiri
 - Elvira Metaj
 - Esra Qerimi
+
+Data Dorezimit : 30.05.2023
